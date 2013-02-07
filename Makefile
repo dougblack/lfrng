@@ -1,4 +1,4 @@
-obj-m += procfs1.o
+obj-m += procfs1.o random_module.o
 
 all:
 	make -C /lib/modules/$(shell uname -r)/build M=$(PWD) modules
