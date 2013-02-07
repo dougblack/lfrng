@@ -20,7 +20,9 @@ struct proc_dir_entry *min_entry;
 struct proc_dir_entry *max_entry;
 struct proc_dir_entry *rand_entry;
 
-
+int min_buffer_size;
+int max_buffer_size;
+int seed_buffer_size;
 
 int read_rand(char *buffer, char **buffer_location, off_t offset, int buffer_length, int *eof, void *data)
 {
@@ -36,6 +38,57 @@ int read_rand(char *buffer, char **buffer_location, off_t offset, int buffer_len
    }
 
    return ret;
+}
+
+int min_write(struct file *file, const char *buffer, unsigned long count, void *data)
+{
+   /* get buffer size */
+   min_buffer_size = count;
+   if (min_buffer_size > PROCFS_MAX_SIZE) {
+      min_buffer_size = PROCFS_MAX_SIZE;
+   }
+
+   /* write data to the buffer */
+   if (copy_from_user(min_buffer, buffer, min_buffer_size)) {
+      return -EFAULT;
+   }
+
+   return min_buffer_size;
+
+}
+
+int max_write(struct file *file, const char *buffer, unsigned long count, void *data)
+{
+   /* get buffer size */
+   max_buffer_size = count;
+   if (max_buffer_size > PROCFS_MAX_SIZE) {
+      max_buffer_size = PROCFS_MAX_SIZE;
+   }
+
+   /* write data to the buffer */
+   if (copy_from_user(max_buffer, buffer, max_buffer_size)) {
+      return -EFAULT;
+   }
+
+   return max_buffer_size;
+
+}
+
+int seed_write(struct file *file, const char *buffer, unsigned long count, void *data)
+{
+   /* get buffer size */
+   seed_buffer_size = count;
+   if (seed_buffer_size > PROCFS_seed_SIZE) {
+      seed_buffer_size = PROCFS_seed_SIZE;
+   }
+
+   /* write data to the buffer */
+   if (copy_from_user(seed_buffer, buffer, seed_buffer_size)) {
+      return -EFAULT;
+   }
+
+   return seed_buffer_size;
+
 }
 
 int init_module()
