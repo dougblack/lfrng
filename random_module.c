@@ -3,148 +3,94 @@
 #include <linux/module.h>
 #include <linux/kernel.h>
 #include <linux/proc_fs.h>
-#include <linux/proc_fs.h>
+#include <linux/sched.h>
+#include <asm/current.h>
+#include <asm/uaccess.h>
 
-#define seed_name "lfrng_seed"
+#define thread_id_name "lfrng_seed"
 #define min_name "lfrng_min"
 #define max_name "lfrng_max"
-#define rand_name "lfrng_rand"
+#define nthreads_name "nthreads"
+
+#define PROCFS_MAX_SIZE 1024
+
+// PROC ENTRIES
+struct proc_dir_entry *nthreads_entry;
+struct proc_dir_entry *thread_id_entry;
 
 static unsigned long long MULTIPLIER  = 764261123;
 static unsigned long long PMOD        = 2147483647;
 static unsigned long long mult_n;
 double random_low, random_hi;
 
-struct proc_dir_entry *seed_entry;
-struct proc_dir_entry *min_entry;
-struct proc_dir_entry *max_entry;
-struct proc_dir_entry *rand_entry;
-
-int min_buffer_size;
-int max_buffer_size;
-int seed_buffer_size;
-
-int read_rand(char *buffer, char **buffer_location, off_t offset, int buffer_length, int *eof, void *data)
+int nthreads_read(char *buffer, char **buffer_location, off_t offset, int buffer_length, int *eof, void *data)
 {
    int ret;
 
-   printk(KERN_INFO "procfile_read (/proc/%s) called \n", seed_name);
+   printk(KERN_INFO "procfile_read (/proc/%s) called \n", nthreads_name);
 
    if (offset > 0) {
       ret = 0;
    } else {
-      //ret = our_random();
-      ret = sprintf(buffer, "HELLO\n");
+      struct task_struct *task;
+      int number_of_tasks = 1;
+      for (task = next_thread(current); task != current; task = next_thread(task)) {
+         number_of_tasks++; 
+      }
+      ret = sprintf(buffer, "Number of tasks: %d\n", number_of_tasks);
    }
-
    return ret;
 }
 
-int min_write(struct file *file, const char *buffer, unsigned long count, void *data)
+int thread_id_read(char *buffer, char **buffer_location, off_t offset, int buffer_length, int *eof, void *data)
 {
-   /* get buffer size */
-   min_buffer_size = count;
-   if (min_buffer_size > PROCFS_MAX_SIZE) {
-      min_buffer_size = PROCFS_MAX_SIZE;
+   int ret;
+
+   printk(KERN_INFO "procfile_read (/proc/%s) called \n", nthreads_name);
+
+   if (offset > 0) {
+      ret = 0;
+   } else {
+      int process_id = current->pid;
+      ret = sprintf(buffer, "CURRENT PID: %d\n", process_id);
    }
-
-   /* write data to the buffer */
-   if (copy_from_user(min_buffer, buffer, min_buffer_size)) {
-      return -EFAULT;
-   }
-
-   return min_buffer_size;
-
-}
-
-int max_write(struct file *file, const char *buffer, unsigned long count, void *data)
-{
-   /* get buffer size */
-   max_buffer_size = count;
-   if (max_buffer_size > PROCFS_MAX_SIZE) {
-      max_buffer_size = PROCFS_MAX_SIZE;
-   }
-
-   /* write data to the buffer */
-   if (copy_from_user(max_buffer, buffer, max_buffer_size)) {
-      return -EFAULT;
-   }
-
-   return max_buffer_size;
-
-}
-
-int seed_write(struct file *file, const char *buffer, unsigned long count, void *data)
-{
-   /* get buffer size */
-   seed_buffer_size = count;
-   if (seed_buffer_size > PROCFS_seed_SIZE) {
-      seed_buffer_size = PROCFS_seed_SIZE;
-   }
-
-   /* write data to the buffer */
-   if (copy_from_user(seed_buffer, buffer, seed_buffer_size)) {
-      return -EFAULT;
-   }
-
-   return seed_buffer_size;
-
+   return ret;
 }
 
 int init_module()
 {
-   seed_entry = create_proc_entry(seed_name, 0644, NULL);
-   max_entry = create_proc_entry(max_name, 0644, NULL);
-   min_entry = create_proc_entry(min_name, 0644, NULL);
-   rand_entry = create_proc_entry(rand_name, 0644, NULL);
+   nthreads_entry = create_proc_entry(nthreads_name, 0644, NULL);
+   thread_id_entry = create_proc_entry(thread_id_name, 0644, NULL);
 
-   if (seed_entry == NULL || max_entry == NULL || min_entry == NULL || rand_entry == NULL) {
-      remove_proc_entry(seed_name, NULL);
-      remove_proc_entry(min_name, NULL);
-      remove_proc_entry(max_name, NULL);
-      remove_proc_entry(rand_name, NULL);
+   if (nthreads_entry == NULL || thread_id_entry == NULL) {
+      remove_proc_entry(thread_id_name, NULL);
+      remove_proc_entry(nthreads_name, NULL);
       printk(KERN_ALERT "Error: Could not initialize lfrng procs.");
       return -ENOMEM;
    }
 
-//   seed_entry->write_proc = write_seed;
-   seed_entry->owner = THIS_MODULE;
-   seed_entry->mode = S_IFREG | S_IRUGO;
-   seed_entry->uid = 0;
-   seed_entry->gid = 0;
-   seed_entry->size = 37;
+   nthreads_entry->read_proc = nthreads_read;
+   nthreads_entry->owner = THIS_MODULE;
+   nthreads_entry->mode = S_IFREG | S_IRUGO;
+   nthreads_entry->uid = 0;
+   nthreads_entry->gid = 0;
+   nthreads_entry->size = 37;
 
-//   min_entry->write_proc = write_min;
-   min_entry->owner = THIS_MODULE;
-   min_entry->mode = S_IFREG | S_IRUGO;
-   min_entry->uid = 0;
-   min_entry->gid = 0;
-   min_entry->size = 37;
+   //thread_id_entry->read_proc = thread_num_read;
+   thread_id_entry->owner = THIS_MODULE;
+   thread_id_entry->mode = S_IFREG | S_IRUGO;
+   thread_id_entry->uid = 0;
+   thread_id_entry->gid = 0;
+   thread_id_entry->size = 37;
 
-//   max_entry->write_proc = write_max;
-   max_entry->owner = THIS_MODULE;
-   max_entry->mode = S_IFREG | S_IRUGO;
-   max_entry->uid = 0;
-   max_entry->gid = 0;
-   max_entry->size = 37;
-
-   rand_entry->read_proc = read_rand;
-   rand_entry->owner = THIS_MODULE;
-   rand_entry->mode = S_IFREG | S_IRUGO;
-   rand_entry->uid = 0;
-   rand_entry->gid = 0;
-   rand_entry->size = 37;
-
-   printk(KERN_INFO "/proc/%s created\n", seed_name);
+   printk(KERN_INFO "/proc/%s created\n", thread_id_name);
    return 0;
 }
 
 void cleanup_module()
 {
-   remove_proc_entry(rand_name, NULL);
-   remove_proc_entry(seed_name, NULL);
-   remove_proc_entry(max_name, NULL);
-   remove_proc_entry(min_name, NULL);
-   printk(KERN_INFO "/proc/%s removed\n", seed_name);
+   remove_proc_entry(nthreads_name, NULL);
+   remove_proc_entry(thread_id_name, NULL);
+   printk(KERN_INFO "/proc/%s removed\n", thread_id_name);
 }
 
